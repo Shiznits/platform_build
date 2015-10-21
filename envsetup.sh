@@ -9,6 +9,8 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - mmm:       Builds all of the modules in the supplied directories, but not their dependencies.
              To limit the modules being built use the syntax: mmm dir/:target1,target2.
 - mma:       Builds all of the modules in the current directory, and their dependencies.
+- mms:     Short circuit builder. Quickly re-build the kernel, rootfs, boot and system images
+           without deep dependencies. Requires the full build to have run before.
 - mmma:      Builds all of the modules in the supplied directories, and their dependencies.
 - provision: Flash device with all required partitions. Options will be passed on to fastboot.
 - cgrep:     Greps on all local C/C++ files.
@@ -1504,6 +1506,28 @@ function reposync() {
             ;;
         *)
             schedtool -B -n 1 -e ionice -n 1 `which repo` sync -j 4 "$@"
+            ;;
+    esac
+}
+
+function mms() {
+    local T=$(gettop)
+    if [ -z "$T" ]
+    then
+        echo "Couldn't locate the top of the tree.  Try setting TOP."
+        return 1
+    fi
+    case `uname -s` in
+        Darwin)
+            local NUM_CPUS=$(sysctl hw.ncpu|cut -d" " -f2)
+            ONE_SHOT_MAKEFILE="__none__" \
+                make -C $T -j $NUM_CPUS "$@"
+            ;;
+        *)
+            local NUM_CPUS=$(cat /proc/cpuinfo | grep "^processor" | wc -l)
+            ONE_SHOT_MAKEFILE="__none__" \
+                mk_timer schedtool -B -n 1 -e ionice -n 1 \
+                make -C $T -j $NUM_CPUS "$@"
             ;;
     esac
 }
